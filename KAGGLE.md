@@ -18,15 +18,37 @@ Tài liệu này hướng dẫn chi tiết từng bước để chạy dự án 
 
 Chạy các đoạn mã sau trong các ô (cells) của Kaggle Notebook:
 
-### Bước 2.1 — Tải mã nguồn về Kaggle
-Bạn có thể clone trực tiếp kho chứa từ GitHub:
-```python
-# Clone mã nguồn từ repo
-!git clone https://github.com/dphu221/akbc-rag.git
+### Bước 2.1 — Tải mã nguồn từ Kho lưu trữ Riêng tư (Private Repository)
+Vì kho chứa này là riêng tư (Private), bạn cần sử dụng **GitHub Personal Access Token (PAT)** để tải mã nguồn về Kaggle.
 
-# Di chuyển thư mục làm việc hiện tại vào thư mục dự án
+#### Cách A: Sử dụng Kaggle Secrets (Khuyên dùng - Bảo mật cao nhất)
+Để tránh lộ Token trong Notebook khi chia sẻ hoặc lưu lịch sử chạy:
+1. Tại giao diện Kaggle Notebook, chọn **Add-ons** ở menu phía trên -> Chọn **Secrets**.
+2. Thêm một Secret mới:
+   - **Label**: `GITHUB_PAT`
+   - **Value**: *(Điền mã token PAT của bạn)*
+3. Thêm một Secret thứ hai:
+   - **Label**: `GITHUB_USERNAME`
+   - **Value**: *(Điền tên tài khoản GitHub của bạn)*
+4. Chạy đoạn mã sau trong Notebook để lấy thông tin bí mật và tải mã nguồn:
+```python
+from kaggle_secrets import UserSecretsClient
+user_secrets = UserSecretsClient()
+
+pat = user_secrets.get_secret("GITHUB_PAT")
+username = user_secrets.get_secret("GITHUB_USERNAME")
+
+!git clone https://{username}:{pat}@github.com/dphu221/akbc-rag.git
 %cd akbc-rag
 ```
+
+#### Cách B: Clone trực tiếp (Nhanh chóng)
+Nếu chỉ chạy cá nhân và không chia sẻ notebook, bạn có thể điền trực tiếp tài khoản và Token vào đường dẫn dưới đây:
+```python
+!git clone https://<tên_tài_khoản_github>:<mã_personal_access_token>@github.com/dphu221/akbc-rag.git
+%cd akbc-rag
+```
+
 
 ### Bước 2.2 — Cài đặt các thư viện cần thiết
 Kaggle đã cài sẵn PyTorch và một số thư viện cơ bản. Bạn cần cài các gói phụ thuộc đặc thù của dự án:
