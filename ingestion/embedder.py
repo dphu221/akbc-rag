@@ -48,13 +48,15 @@ class _Embedder:
 
     @staticmethod
     def _resolve_device(device: str) -> str:
+        if device == "cuda":
+            return "cuda:0"
         if device != "auto":
             return device
         try:
             import torch
 
             if torch.cuda.is_available():
-                return "cuda"
+                return "cuda:0"
         except Exception:
             pass
         return "cpu"
@@ -70,7 +72,7 @@ class _Embedder:
             logger.info("Loading %s via FlagEmbedding on %s", MODEL_NAME, self.device)
             self._model = BGEM3FlagModel(
                 MODEL_NAME,
-                use_fp16=(self.device == "cuda"),
+                use_fp16=("cuda" in self.device),
                 device=self.device,
             )
             self._backend = "flag"
