@@ -1,4 +1,4 @@
-"""Embed chunks with BAAI/bge-m3 and build a FAISS index.
+"""Embed chunks with BAAI/bge-m3 and build a Chroma index.
 
 This module is the **only** place in the codebase that touches the embedding
 model, so swapping the back-end later (ONNX, SentenceTransformers, dedicated
@@ -13,7 +13,7 @@ Design decisions
 * Run on GPU when CUDA is available; otherwise CPU (slow but works for the
   small UET corpus of a few thousand chunks).
 * Persist three artefacts side-by-side under ``data/vector_db/``:
-    - ``faiss.index``       : the FAISS index (Flat IP for cosine after L2 norm)
+    - ``chroma/``           : the Chroma SQLite & HNSW index directory
     - ``chunks.jsonl``      : the chunk metadata in the same order as the index
     - ``embedder_meta.json``: model name, dimension, normalisation flag
 """
@@ -121,20 +121,21 @@ def load_embedder(device: str = "auto") -> _Embedder:
 
 
 # --------------------------------------------------------------------------- #
-# FAISS index build / load
+# Chroma index build
 # --------------------------------------------------------------------------- #
-def build_faiss_index(
+def build_chroma_index(
     chunks_path: str | Path,
     *,
     out_dir: str | Path = DEFAULT_DB_DIR,
     device: str = "auto",
     batch_size: int = 8,
+    collection_name: str = "uet_handbook",
 ) -> dict:
-    """Embed every chunk and write a FAISS index next to the chunks file.
+    """Embed every chunk and write a Chroma index next to the chunks file.
 
-    Returns a small summary dict ``{n_chunks, dim, index_path, chunks_path}``.
+    Returns a small summary dict ``{n_chunks, dim, chroma_dir, chunks_path}``.
     """
-    import faiss  # local import: faiss is heavy and optional during dev
+    import chromadb  # local import
 
     chunks_path = Path(chunks_path)
     out_dir = Path(out_dir)
@@ -156,15 +157,56 @@ def build_faiss_index(
     n, dim = vectors.shape
     logger.info("Embedding shape: %s", (n, dim))
 
-    # Flat inner-product index (vectors are L2-normalised => cosine).
-    index = faiss.IndexFlatIP(dim)
-    index.add(vectors)
-    logger.info("FAISS index size: %d", index.ntotal)
+    # Initialize Chroma PersistentClient
+    chroma_dir = out_dir / "chroma"
+    chroma_dir.mkdir(parents=True, exist_ok=True)
+    chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
 
-    index_path = out_dir / "faiss.index"
+    # Get or create collection with cosine similarity
+    collection = chroma_client.get_or_create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    # Reset collection if it already contains documents
+    if collection.count() > 0:
+        logger.info("Collection '%s' already exists and is not empty. Resetting it...", collection_name)
+        chroma_client.delete_collection(collection_name)
+        collection = chroma_client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+    # Prepare lists for batch insertion
+    ids = [f"chunk_{i}" for i in range(n)]
+    embeddings = vectors.tolist()
+    
+    metadatas = []
+    for i, c in enumerate(chunks):
+        meta = {
+            "chunk_id": c.get("chunk_id", f"chunk_{i}"),
+            "article_id": str(c.get("article_id", "")),
+            "chapter": str(c.get("chapter", "")),
+            "source": c.get("source", ""),
+            "source_url": c.get("source_url", ""),
+            "idx": i,
+        }
+        metadatas.append(meta)
+
+    # Insert items in batches
+    chroma_batch_size = 500
+    for start_idx in range(0, n, chroma_batch_size):
+        end_idx = min(start_idx + chroma_batch_size, n)
+        collection.add(
+            ids=ids[start_idx:end_idx],
+            embeddings=embeddings[start_idx:end_idx],
+            metadatas=metadatas[start_idx:end_idx],
+            documents=texts[start_idx:end_idx],
+        )
+    logger.info("Chroma collection size: %d", collection.count())
+
     chunks_out = out_dir / "chunks.jsonl"
     meta_out = out_dir / "embedder_meta.json"
-    faiss.write_index(index, str(index_path))
 
     with open(chunks_out, "w", encoding="utf-8") as fh:
         for c in chunks:
@@ -175,7 +217,7 @@ def build_faiss_index(
         "dim": dim,
         "n_chunks": n,
         "normalised": True,
-        "metric": "cosine (IndexFlatIP on L2-normalised vectors)",
+        "metric": "cosine (hnsw:space = cosine in Chroma)",
         "backend": embedder._backend,
     }
     meta_out.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -183,7 +225,7 @@ def build_faiss_index(
     return {
         "n_chunks": n,
         "dim": dim,
-        "index_path": str(index_path),
+        "chroma_dir": str(chroma_dir),
         "chunks_path": str(chunks_out),
         "meta_path": str(meta_out),
     }
@@ -195,11 +237,12 @@ def build_faiss_index(
 def _cli() -> None:  # pragma: no cover
     import argparse
 
-    p = argparse.ArgumentParser(description="Build FAISS index from chunks.jsonl")
+    p = argparse.ArgumentParser(description="Build Chroma index from chunks.jsonl")
     p.add_argument("--chunks", required=True, help="Path to chunks.jsonl")
     p.add_argument("--out", default=str(DEFAULT_DB_DIR), help="Output dir for vector DB")
     p.add_argument("--device", default="auto", help="cuda | cpu | auto")
     p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--collection-name", default="uet_handbook", help="Chroma collection name")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
 
@@ -207,11 +250,12 @@ def _cli() -> None:  # pragma: no cover
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     )
-    summary = build_faiss_index(
+    summary = build_chroma_index(
         args.chunks,
         out_dir=args.out,
         device=args.device,
         batch_size=args.batch_size,
+        collection_name=args.collection_name,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
