@@ -47,7 +47,11 @@ rag-pipeline/
 
 ## 2. Cài đặt
 
-Yêu cầu **Python 3.10+** và (khuyến nghị) **GPU CUDA** để chạy mô hình LLM với tốc độ chấp nhận được. Trên Kaggle, hãy chọn kernel **Python 3.10 + GPU T4 x2**.
+Yêu cầu **Python 3.10+** và (khuyến nghị) **GPU CUDA** để chạy mô hình LLM với tốc độ chấp nhận được.
+
+> [!TIP]
+> Để chạy dự án này trên nền tảng đám mây Kaggle hoàn toàn miễn phí (có hỗ trợ GPU T4), hãy tham khảo [Hướng dẫn chạy trên Kaggle](KAGGLE.md).
+
 
 ```bash
 python -m venv .venv
