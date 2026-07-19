@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# UET RAG Chatbot — fixed dependencies
+# ---------------------------------------------------------------------------
+# Python 3.10+ recommended (matches Kaggle kernel).
+# Install with:  pip install -r requirements.txt
+
+# --- Web crawling / parsing ---
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# --- Document extraction ---
+pdfplumber>=0.11.0
+PyPDF2>=3.0.0
+pymupdf>=1.24.0
+python-docx>=1.1.0
+
+# --- Embedding (bge-m3) ---
+# FlagEmbedding is the official BGE library (supports dense + sparse + colbert).
+FlagEmbedding>=1.2.10
+# sentence-transformers is the fallback back-end if FlagEmbedding is unavailable.
+sentence-transformers>=3.0.0
+
+# --- Vector DB ---
+chromadb>=0.5.0
+
+# --- BM25 hybrid retrieval ---
+rank-bm25>=0.2.2
+
+# --- Second-stage reranker (cross-encoder) ---
+flashrank>=0.2.5
+
+# --- LLM (Qwen2.5-3B-Instruct) ---
+torch>=2.1.0
+transformers>=4.44.0
+accelerate>=0.30.0
+bitsandbytes>=0.43.0; platform_system == "Linux"
+
+# --- UI ---
+streamlit>=1.35.0
+
+# --- Utilities ---
+numpy>=1.24.0
+tqdm>=4.66.0
