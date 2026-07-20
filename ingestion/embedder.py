@@ -73,7 +73,7 @@ class _Embedder:
             self._model = BGEM3FlagModel(
                 MODEL_NAME,
                 use_fp16=("cuda" in self.device),
-                device=self.device,
+                devices=self.device,
             )
             self._backend = "flag"
             return
