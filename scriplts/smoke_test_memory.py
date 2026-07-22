@@ -16,7 +16,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
 logger = logging.getLogger("memory-test")
 
-ROOT = Path(__file__).resolve().parent.parent / "rag-pipeline"
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from generation.memory import SummaryMemory

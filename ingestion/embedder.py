@@ -99,7 +99,6 @@ class _Embedder:
                 return_dense=True,
                 return_sparse=False,
                 return_colbert_vecs=False,
-                show_progress=show_progress,
             )
             vecs = np.asarray(out["dense_vecs"], dtype=np.float32)
         else:

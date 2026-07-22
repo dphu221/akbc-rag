@@ -150,16 +150,21 @@ class QwenGenerator:
         if do_sample is None:
             do_sample = temperature > 0.0
 
+        gen_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "do_sample": do_sample,
+            "repetition_penalty": repetition_penalty,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+        }
+        if do_sample:
+            gen_kwargs["temperature"] = temperature
+            gen_kwargs["top_p"] = top_p
+
         with torch.no_grad():
             out = self.model.generate(
                 **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=do_sample,
-                temperature=temperature if do_sample else 1.0,
-                top_p=top_p if do_sample else 1.0,
-                repetition_penalty=repetition_penalty,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
+                **gen_kwargs,
             )
         # Slice off the input tokens, decode only the new ones.
         in_len = inputs["input_ids"].shape[1]
