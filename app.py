@@ -146,128 +146,157 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    # ---- CSS: Minimal light -------------------------------------------
+    # ---- CSS: Responsive Adaptive Design -------------------------------
     st.markdown(
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+        /* Responsive design system matching Streamlit's light & dark themes */
         :root {
-            --bg: #ffffff;
-            --surface: #fafbfc;
-            --border: #e5e7eb;
-            --border-strong: #d1d5db;
-            --text: #111827;
-            --text-muted: #6b7280;
-            --accent: #475569;       /* slate-600 */
-            --accent-soft: #f1f5f9;  /* slate-100 */
-            --refusal-bg: #fef9c3;   /* yellow-100 */
+            --user-bubble-bg: rgba(37, 99, 235, 0.06);
+            --user-bubble-border: rgba(37, 99, 235, 0.22);
+            --asst-bubble-bg: rgba(148, 163, 184, 0.08);
+            --asst-bubble-border: rgba(148, 163, 184, 0.2);
+            --text-muted: #64748b;
+            --refusal-bg: #fef9c3;
+            --refusal-text: #713f12;
+            --refusal-border: #eab308;
+            --card-border: rgba(148, 163, 184, 0.2);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --user-bubble-bg: rgba(59, 130, 246, 0.18);
+                --user-bubble-border: rgba(59, 130, 246, 0.4);
+                --asst-bubble-bg: rgba(30, 41, 59, 0.7);
+                --asst-bubble-border: rgba(51, 65, 85, 0.8);
+                --text-muted: #94a3b8;
+                --refusal-bg: #422006;
+                --refusal-text: #fef08a;
+                --refusal-border: #ca8a04;
+                --card-border: rgba(255, 255, 255, 0.12);
+            }
+        }
+
+        [data-theme="dark"] {
+            --user-bubble-bg: rgba(59, 130, 246, 0.18);
+            --user-bubble-border: rgba(59, 130, 246, 0.4);
+            --asst-bubble-bg: rgba(30, 41, 59, 0.7);
+            --asst-bubble-border: rgba(51, 65, 85, 0.8);
+            --text-muted: #94a3b8;
+            --refusal-bg: #422006;
+            --refusal-text: #fef08a;
             --refusal-border: #ca8a04;
+            --card-border: rgba(255, 255, 255, 0.12);
         }
 
         html, body, .stApp {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            color: var(--text);
-            background-color: var(--bg);
         }
 
-        /* Tighter, more airy block container */
+        /* Container constraints */
         .block-container {
-            padding-top: 2.5rem;
-            padding-bottom: 3rem;
-            max-width: 760px;
+            padding-top: 2rem;
+            padding-bottom: 4rem;
+            max-width: 780px;
         }
 
-        /* Headers */
-        h1, h2, h3, h4 {
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            color: var(--text);
-            letter-spacing: -0.01em;
-        }
-
-        /* Subtle horizontal rule under the page title */
+        /* Rule divider under title */
         .title-rule {
             border: 0;
-            border-top: 1px solid var(--border);
-            margin: 1rem 0 1.5rem 0;
+            border-top: 1px solid var(--card-border);
+            margin: 0.8rem 0 1.5rem 0;
         }
 
-        /* Chat bubbles — clean borders, no fills */
+        /* Chat bubbles */
         .stChatMessage {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background-color: var(--bg);
-            padding: 1rem 1.1rem;
-            margin-bottom: 0.9rem;
-            box-shadow: none;
+            border-radius: 10px !important;
+            padding: 1rem 1.25rem !important;
+            margin-bottom: 1rem !important;
+            transition: background-color 0.2s ease, border-color 0.2s ease !important;
         }
+
+        /* Ensure message contents inherit Streamlit's native text color */
+        .stChatMessage p, 
+        .stChatMessage span, 
+        .stChatMessage div, 
+        .stChatMessage markdown {
+            color: inherit !important;
+        }
+
+        /* User Message Bubble */
+        div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]),
+        .stChatMessage:has([data-testid="user"]) {
+            background-color: var(--user-bubble-bg) !important;
+            border: 1px solid var(--user-bubble-border) !important;
+        }
+
+        /* Assistant Message Bubble */
+        div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]),
         .stChatMessage:has([data-testid="assistant"]) {
-            background-color: var(--surface);
+            background-color: var(--asst-bubble-bg) !important;
+            border: 1px solid var(--asst-bubble-border) !important;
         }
 
-        /* Avatar size: smaller, more discreet */
+        /* Avatar styling */
         .stChatMessageAvatar {
-            width: 28px !important;
-            height: 28px !important;
+            border-radius: 6px !important;
         }
 
-        /* Sidebar: lighter typography */
+        /* Sidebar headers & text */
         section[data-testid="stSidebar"] .stMarkdown h1,
         section[data-testid="stSidebar"] .stMarkdown h2,
         section[data-testid="stSidebar"] .stMarkdown h3 {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.06em;
             color: var(--text-muted);
         }
 
-        /* Buttons: minimal outlined style */
+        /* Buttons */
         .stButton > button {
-            border: 1px solid var(--border-strong);
-            background-color: var(--bg);
-            color: var(--text);
-            border-radius: 4px;
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
             font-weight: 500;
             transition: all 0.15s ease;
-        }
-        .stButton > button:hover {
-            background-color: var(--accent-soft);
-            border-color: var(--accent);
-            color: var(--accent);
         }
 
         /* Refusal bubble */
         .refusal {
             background: var(--refusal-bg);
-            border-left: 3px solid var(--refusal-border);
-            padding: 0.7rem 0.9rem;
-            border-radius: 4px;
-            color: #4d3a00;
+            border: 1px solid var(--refusal-border);
+            border-left: 4px solid var(--refusal-border);
+            padding: 0.8rem 1.1rem;
+            border-radius: 8px;
+            color: var(--refusal-text) !important;
             font-size: 0.95rem;
+            font-weight: 500;
+        }
+        .refusal * {
+            color: var(--refusal-text) !important;
         }
 
-        /* Caption / metadata */
+        /* Captions & metadata */
         .stCaption, [data-testid="stCaptionContainer"] {
             color: var(--text-muted) !important;
-            font-size: 0.78rem !important;
+            font-size: 0.8rem !important;
         }
 
-        /* Expander: minimal */
+        /* Expander */
         .stExpander {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background-color: var(--bg);
+            border: 1px solid var(--card-border) !important;
+            border-radius: 8px !important;
+            background-color: transparent !important;
         }
 
-        /* Hide the default Streamlit "Made with Streamlit" footer */
+        /* Hide footer */
         footer { visibility: hidden; }
 
-        /* Inputs: thin underline style */
+        /* Chat input */
         .stChatInput textarea {
-            border: 1px solid var(--border-strong) !important;
-            border-radius: 6px !important;
             font-family: 'Inter', sans-serif !important;
+            border-radius: 8px !important;
         }
         </style>
         """,
