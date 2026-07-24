@@ -103,7 +103,7 @@ class QwenGenerator:
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
             quantization_config=bnb_config,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             device_map="auto" if device == "cuda" else None,
             trust_remote_code=True,
         )
