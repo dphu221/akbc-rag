@@ -60,34 +60,3 @@ def run(
     return summary
 
 
-def _cli() -> None:  # pragma: no cover
-    p = argparse.ArgumentParser(description="Run ingestion: manifest -> chunks -> Chroma")
-    p.add_argument(
-        "--manifest",
-        default=str(Path(__file__).resolve().parents[1] / "data" / "raw" / "manifest.jsonl"),
-    )
-    p.add_argument("--chunks", default=None)
-    p.add_argument("--db", default=str(DEFAULT_DB_DIR))
-    p.add_argument("--device", default="auto")
-    p.add_argument("--batch-size", type=int, default=8)
-    p.add_argument("-v", "--verbose", action="store_true")
-    args = p.parse_args()
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-    )
-    import json
-
-    summary = run(
-        manifest_path=args.manifest,
-        chunks_path=args.chunks,
-        db_dir=args.db,
-        device=args.device,
-        batch_size=args.batch_size,
-    )
-    print(json.dumps(summary, indent=2, ensure_ascii=False))
-
-
-if __name__ == "__main__":  # pragma: no cover
-    _cli()
