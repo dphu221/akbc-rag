@@ -1,29 +1,30 @@
-"""Streamlit chatbot UI for the UET RAG handbook — Minimal Light style.
+"""UI chatbot Streamlit cho sổ tay RAG UET — phong cách sáng tối giản.
 
-Run with:
+Chạy bằng:
 
     streamlit run app.py
 
-Design language
----------------
-* **Minimal light** palette: pure white background, subtle gray borders,
-  one accent color (a calm slate blue) for primary actions.
-* **Inter** font (loaded from Google Fonts) for headings + body. Vietnamese
-  diacritics render crisply.
-* Lots of whitespace, generous line-height, no decorative gradients or
-  backgrounds.  Focus is on the chat content itself.
-* Citation sources are shown in a low-key expander that matches the chat
-  bubble width — present when needed, invisible when not.
+Ngôn ngữ thiết kế
+-----------------
+* Bảng màu **sáng tối giản**: nền trắng tinh, viền xám nhẹ và một màu nhấn
+  (xanh lam đá phiến dịu) cho các thao tác chính.
+* Phông **Inter** (nạp từ Google Fonts) cho tiêu đề và nội dung. Dấu tiếng Việt
+  được hiển thị sắc nét.
+* Nhiều khoảng trắng, chiều cao dòng thoáng, không có gradient hay nền trang
+  trí. Trọng tâm là chính nội dung hội thoại.
+* Nguồn trích dẫn được hiển thị trong vùng mở rộng kín đáo, có chiều rộng khớp
+  với bong bóng chat — xuất hiện khi cần và ẩn khi không cần.
 
-Features
---------
-* Sidebar: model status, retriever parameters (top_k, weights, RRF k,
-  rerank pool), FlashRank toggle, recent-window size, "Clear chat" button.
-* Multi-turn: ``SummaryMemory`` keeps a rolling LLM-generated summary of old
-  turns and the last N recent turns verbatim.
-* Anti-hallucination: if the retriever returns 0 chunks OR the LLM reply
-  equals ``REFUSAL``, the UI shows a dedicated "no data" bubble.
-* Each assistant bubble includes an expandable "Nguồn trích dẫn" panel.
+Tính năng
+---------
+* Thanh bên: trạng thái mô hình, tham số truy hồi (top_k, trọng số, RRF k,
+  tập tái xếp hạng), nút bật FlashRank, kích thước cửa sổ gần đây và nút
+  "Xóa lịch sử chat".
+* Nhiều lượt: ``SummaryMemory`` giữ bản tóm tắt các lượt cũ do LLM tạo và giữ
+  nguyên văn N lượt gần nhất.
+* Chống bịa thông tin: nếu bộ truy hồi trả về 0 đoạn HOẶC câu trả lời của LLM
+  bằng ``REFUSAL``, UI hiển thị bong bóng "không có dữ liệu" riêng.
+* Mỗi bong bóng trợ lý có bảng "Nguồn trích dẫn" có thể mở rộng.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ logger = logging.getLogger("rag-app")
 
 
 # --------------------------------------------------------------------------- #
-# Cached singletons
+# Các singleton được lưu đệm
 # --------------------------------------------------------------------------- #
 @st.cache_resource(show_spinner="Đang nạp bộ truy hồi (Chroma + BM25) ...")
 def get_retriever() -> HybridRetriever:
@@ -71,7 +72,7 @@ def get_llm() -> QwenGenerator:
 
 
 # --------------------------------------------------------------------------- #
-# UI helpers
+# Tiện ích UI
 # --------------------------------------------------------------------------- #
 def _render_sources(chunks: List[Dict[str, Any]]) -> None:
     if not chunks:
@@ -118,9 +119,9 @@ def _render_sources(chunks: List[Dict[str, Any]]) -> None:
 
 def _ensure_state() -> None:
     if "memory" not in st.session_state:
-        st.session_state.memory = None  # lazy: created once LLM is loaded
+        st.session_state.memory = None  # nạp lười: tạo sau khi LLM được nạp
     if "display_turns" not in st.session_state:
-        # display_turns: list of {role, content, chunks} for rendering
+        # display_turns: danh sách {role, content, chunks} dùng để hiển thị
         st.session_state.display_turns = []
 
 
@@ -136,7 +137,7 @@ def _get_memory(llm: QwenGenerator, recent_turns: int) -> SummaryMemory:
 
 
 # --------------------------------------------------------------------------- #
-# Main
+# Hàm chính
 # --------------------------------------------------------------------------- #
 def main() -> None:
     st.set_page_config(
@@ -146,13 +147,13 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    # ---- CSS: Responsive Adaptive Design -------------------------------
+    # ---- CSS: Thiết kế thích ứng ----------------------------------------
     st.markdown(
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-        /* Responsive design system matching Streamlit's light & dark themes */
+        /* Hệ thống thiết kế thích ứng với chủ đề sáng và tối của Streamlit */
         :root {
             --user-bubble-bg: rgba(37, 99, 235, 0.06);
             --user-bubble-border: rgba(37, 99, 235, 0.22);
@@ -195,21 +196,21 @@ def main() -> None:
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        /* Container constraints */
+        /* Giới hạn khung chứa */
         .block-container {
             padding-top: 2rem;
             padding-bottom: 4rem;
             max-width: 780px;
         }
 
-        /* Rule divider under title */
+        /* Đường phân cách dưới tiêu đề */
         .title-rule {
             border: 0;
             border-top: 1px solid var(--card-border);
             margin: 0.8rem 0 1.5rem 0;
         }
 
-        /* Chat bubbles */
+        /* Bong bóng chat */
         .stChatMessage {
             border-radius: 10px !important;
             padding: 1rem 1.25rem !important;
@@ -217,7 +218,7 @@ def main() -> None:
             transition: background-color 0.2s ease, border-color 0.2s ease !important;
         }
 
-        /* Ensure message contents inherit Streamlit's native text color */
+        /* Bảo đảm nội dung tin nhắn kế thừa màu chữ gốc của Streamlit */
         .stChatMessage p, 
         .stChatMessage span, 
         .stChatMessage div, 
@@ -225,26 +226,26 @@ def main() -> None:
             color: inherit !important;
         }
 
-        /* User Message Bubble */
+        /* Bong bóng tin nhắn người dùng */
         div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]),
         .stChatMessage:has([data-testid="user"]) {
             background-color: var(--user-bubble-bg) !important;
             border: 1px solid var(--user-bubble-border) !important;
         }
 
-        /* Assistant Message Bubble */
+        /* Bong bóng tin nhắn trợ lý */
         div[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]),
         .stChatMessage:has([data-testid="assistant"]) {
             background-color: var(--asst-bubble-bg) !important;
             border: 1px solid var(--asst-bubble-border) !important;
         }
 
-        /* Avatar styling */
+        /* Kiểu dáng ảnh đại diện */
         .stChatMessageAvatar {
             border-radius: 6px !important;
         }
 
-        /* Sidebar headers & text */
+        /* Tiêu đề và văn bản thanh bên */
         section[data-testid="stSidebar"] .stMarkdown h1,
         section[data-testid="stSidebar"] .stMarkdown h2,
         section[data-testid="stSidebar"] .stMarkdown h3 {
@@ -254,7 +255,7 @@ def main() -> None:
             color: var(--text-muted);
         }
 
-        /* Buttons */
+        /* Các nút */
         .stButton > button {
             border: 1px solid var(--card-border);
             border-radius: 6px;
@@ -262,7 +263,7 @@ def main() -> None:
             transition: all 0.15s ease;
         }
 
-        /* Refusal bubble */
+        /* Bong bóng từ chối */
         .refusal {
             background: var(--refusal-bg);
             border: 1px solid var(--refusal-border);
@@ -277,23 +278,23 @@ def main() -> None:
             color: var(--refusal-text) !important;
         }
 
-        /* Captions & metadata */
+        /* Chú thích và siêu dữ liệu */
         .stCaption, [data-testid="stCaptionContainer"] {
             color: var(--text-muted) !important;
             font-size: 0.8rem !important;
         }
 
-        /* Expander */
+        /* Vùng mở rộng */
         .stExpander {
             border: 1px solid var(--card-border) !important;
             border-radius: 8px !important;
             background-color: transparent !important;
         }
 
-        /* Hide footer */
+        /* Ẩn chân trang */
         footer { visibility: hidden; }
 
-        /* Chat input */
+        /* Ô nhập hội thoại */
         .stChatInput textarea {
             font-family: 'Inter', sans-serif !important;
             border-radius: 8px !important;
@@ -305,7 +306,7 @@ def main() -> None:
 
     _ensure_state()
 
-    # ---- Header --------------------------------------------------------
+    # ---- Đầu trang -----------------------------------------------------
     st.markdown(
         "<h3 style='margin-bottom:0.2rem'>UET RAG Chatbot</h3>"
         "<p style='color:var(--text-muted); margin-top:0; font-size:0.9rem'>"
@@ -315,7 +316,7 @@ def main() -> None:
     )
     st.markdown("<hr class='title-rule' />", unsafe_allow_html=True)
 
-    # ---- Sidebar -------------------------------------------------------
+    # ---- Thanh bên -----------------------------------------------------
     with st.sidebar:
         st.markdown("### Cấu hình")
         top_k = st.slider("Số chunk trả về (top_k)", 1, 20, 5)
@@ -341,7 +342,7 @@ def main() -> None:
         st.caption("• Hybrid: BM25 + Dense + RRF + FlashRank")
         st.caption("• Memory: Summary + recent window")
 
-    # ---- Load models (cached) -----------------------------------------
+    # ---- Nạp các mô hình (đã lưu đệm) ---------------------------------
     try:
         retriever = get_retriever()
     except Exception as exc:
@@ -363,25 +364,25 @@ def main() -> None:
 
     memory = _get_memory(llm, recent_turns)
 
-    # ---- Optional: show running summary -------------------------------
+    # ---- Tùy chọn: hiển thị bản tóm tắt đang tích lũy -----------------
     if memory.get_summary_text():
         with st.expander("Tóm tắt hội thoại (đang lưu)", expanded=False):
             st.caption("Được tạo và cập nhật tự động bởi LLM; dùng để giữ ngữ cảnh dài.")
             st.markdown(memory.get_summary_text())
 
-    # ---- Render display turns -----------------------------------------
+    # ---- Hiển thị các lượt hội thoại ----------------------------------
     for turn in st.session_state.display_turns:
         with st.chat_message(turn["role"]):
             st.markdown(turn["content"])
             if turn["role"] == "assistant" and turn.get("chunks"):
                 _render_sources(turn["chunks"])
 
-    # ---- Input ---------------------------------------------------------
+    # ---- Đầu vào -------------------------------------------------------
     user_input = st.chat_input("Nhập câu hỏi về Sổ tay Sinh viên UET ...")
     if not user_input:
         return
 
-    # Show user bubble immediately.
+    # Hiển thị bong bóng người dùng ngay lập tức.
     with st.chat_message("user"):
         st.markdown(user_input)
     st.session_state.display_turns.append(
@@ -389,7 +390,7 @@ def main() -> None:
     )
     memory.add_user_turn(user_input)
 
-    # ---- Retrieve ------------------------------------------------------
+    # ---- Truy hồi ------------------------------------------------------
     with st.chat_message("assistant"):
         with st.spinner("Đang truy hồi ngữ cảnh ..."):
             chunks = retriever.search(
@@ -411,7 +412,7 @@ def main() -> None:
             memory.add_assistant_turn(REFUSAL)
             return
 
-        # Build prompt and call LLM.
+        # Tạo prompt và gọi LLM.
         prompt = build_rag_prompt(
             question=user_input,
             retrieved_chunks=chunks,

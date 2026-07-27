@@ -1,12 +1,12 @@
-"""Crawler module for the UET Student Handbook (https://handbook.uet.vnu.edu.vn/).
+"""Mô-đun thu thập dữ liệu Sổ tay Sinh viên UET (https://handbook.uet.vnu.edu.vn/).
 
-This package is responsible for:
-  1. Discovering all internal pages of the handbook site (BFS over local hrefs).
-  2. Downloading every linked PDF / DOCX / DOC file (both internal and external).
-  3. Extracting raw text from HTML pages and from downloaded documents.
-  4. Writing everything to ``data/raw/`` so the ingestion module can chunk it.
+Gói này chịu trách nhiệm:
+  1. Tìm mọi trang nội bộ của sổ tay (BFS trên các href cục bộ).
+  2. Tải mọi tệp PDF / DOCX / DOC được liên kết (cả nội bộ lẫn bên ngoài).
+  3. Trích xuất văn bản thô từ trang HTML và tài liệu đã tải.
+  4. Ghi mọi thứ vào ``data/raw/`` để mô-đun nhập liệu phân đoạn.
 
-Public entry-point: :func:`crawler.crawl.run_crawl`.
+Điểm vào công khai: :func:`crawler.crawl.run_crawl`.
 """
 
 from .crawl import run_crawl  # noqa: F401

@@ -1,19 +1,20 @@
-"""Hybrid retriever: BM25 + Chroma Dense + RRF + FlashRank second-stage rerank.
+"""Bộ truy hồi lai: BM25 + Chroma Dense + RRF + FlashRank tái xếp hạng bước hai.
 
-Pipeline (per query)
---------------------
-1. **BM25** over Vietnamese-stripped tokens (rank_bm25) → top ``k_per_retriever``.
-2. **Dense** via Chroma collection query (cosine space) → top ``k_per_retriever``.
-3. **RRF fusion** of the two ranked lists (k=60 default) → top ``rerank_pool``
-   candidates (default 20).  This is the "Hybrid Search" stage.
-4. **FlashRank cross-encoder rerank** on the ``rerank_pool`` candidates →
-   final ``top_k`` results.  FlashRank uses ``ranker_ms_marco_viT_5_1`` under
-   the hood — it is tiny (~120 MB) and runs on CPU in <50 ms for 20 docs.
+Quy trình (cho mỗi truy vấn)
+---------------------------
+1. **BM25** trên các token tiếng Việt đã bỏ dấu (rank_bm25) → ``k_per_retriever`` đầu.
+2. **Dense** qua truy vấn collection Chroma (không gian cosine) → ``k_per_retriever`` đầu.
+3. **Hợp nhất RRF** hai danh sách xếp hạng (k=60 mặc định) → các ứng viên
+   ``rerank_pool`` đầu (mặc định 20). Đây là bước "Tìm kiếm lai".
+4. **Tái xếp hạng bằng cross-encoder FlashRank** trên các ứng viên
+   ``rerank_pool`` → ``top_k`` kết quả cuối. Bên trong FlashRank dùng
+   ``ranker_ms_marco_viT_5_1`` — rất nhỏ (~120 MB) và chạy trên CPU trong
+   <50 ms với 20 tài liệu.
 
-If FlashRank is unavailable (e.g. import failed at runtime), the retriever
-falls back gracefully to RRF-only output.  This keeps the system runnable in
-constrained environments while still respecting the "RRF + FlashRank" design
-whenever the dependency is present.
+Nếu FlashRank không khả dụng (ví dụ nhập thất bại khi chạy), bộ truy hồi sẽ
+chuyển nhẹ nhàng sang đầu ra chỉ dùng RRF. Điều này giúp hệ thống vẫn chạy
+trong môi trường hạn chế, đồng thời tuân thủ thiết kế "RRF + FlashRank" khi
+có đủ phần phụ thuộc.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ DEFAULT_FLASHRANK_MODEL = "ms-marco-MiniLM-L-12-v2"
 
 
 # --------------------------------------------------------------------------- #
-# Vietnamese text utilities
+# Tiện ích văn bản tiếng Việt
 # --------------------------------------------------------------------------- #
 _DIAKRITIC_MAP = str.maketrans(
     "àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ"
@@ -53,7 +54,7 @@ _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
 
 def tokenize(text: str, *, lower: bool = True, strip_diacritics: bool = True) -> List[str]:
-    """Tokenise for BM25."""
+    """Tách token cho BM25."""
     if lower:
         text = text.lower()
     if strip_diacritics:
@@ -62,10 +63,10 @@ def tokenize(text: str, *, lower: bool = True, strip_diacritics: bool = True) ->
 
 
 # --------------------------------------------------------------------------- #
-# BM25 index (unchanged)
+# Chỉ mục BM25 (không đổi)
 # --------------------------------------------------------------------------- #
 class _BM25Index:
-    """Lightweight wrapper around rank_bm25.BM25Okapi."""
+    """Lớp bao nhẹ quanh rank_bm25.BM25Okapi."""
 
     def __init__(self, corpus_tokens: List[List[str]]):
         from rank_bm25 import BM25Okapi
@@ -77,14 +78,14 @@ class _BM25Index:
 
 
 # --------------------------------------------------------------------------- #
-# FlashRank reranker (lazy, optional)
+# Bộ tái xếp hạng FlashRank (nạp lười, tùy chọn)
 # --------------------------------------------------------------------------- #
 class _FlashRanker:
-    """Wrap the ``flashrank.Ranker`` cross-encoder.
+    """Bao bọc cross-encoder ``flashrank.Ranker``.
 
-    The model is downloaded on first use (~120 MB) and cached on disk.  We
-    instantiate it lazily so that environments without FlashRank installed
-    still work — they just skip the rerank step.
+    Mô hình được tải trong lần dùng đầu tiên (~120 MB) và lưu đệm trên đĩa.
+    Khởi tạo theo kiểu nạp lười để môi trường chưa cài FlashRank vẫn hoạt động
+    — chỉ bỏ qua bước tái xếp hạng.
     """
 
     def __init__(self, model_name: str = DEFAULT_FLASHRANK_MODEL):
@@ -121,15 +122,15 @@ class _FlashRanker:
         *,
         top_k: int,
     ) -> List[Dict[str, Any]]:
-        """Re-order ``candidates`` and return the top ``top_k``.
+        """Sắp xếp lại ``candidates`` và trả về ``top_k`` mục đầu.
 
-        ``candidates`` must each contain a ``text`` field.  The returned list
-        has the same dict shape, with an added ``rerank_score`` field.
+        Mỗi phần tử trong ``candidates`` phải có trường ``text``. Danh sách trả
+        về có cùng cấu trúc dict và được thêm trường ``rerank_score``.
         """
         if not candidates or top_k <= 0:
             return []
         if not self._ensure_loaded():
-            # No rerank available — return as-is, truncated.
+            # Không có bộ tái xếp hạng — cắt ngắn và trả về nguyên thứ tự.
             return candidates[:top_k]
 
         from flashrank import RerankRequest  # type: ignore
@@ -145,7 +146,7 @@ class _FlashRanker:
             logger.warning("FlashRank.rerank failed (%s); returning RRF order.", exc)
             return candidates[:top_k]
 
-        # results is a list of dicts with at least "id" and "score".
+        # results là danh sách dict có ít nhất "id" và "score".
         out: List[Dict[str, Any]] = []
         for r in results[:top_k]:
             idx = int(r["id"])
@@ -156,24 +157,24 @@ class _FlashRanker:
 
 
 # --------------------------------------------------------------------------- #
-# Hybrid retriever
+# Bộ truy hồi lai
 # --------------------------------------------------------------------------- #
 class HybridRetriever:
     """BM25 + Chroma Dense + RRF + FlashRank.
 
-    Parameters
-    ----------
+    Tham số
+    -------
     db_dir
-        Directory containing the ``chroma/`` subdirectory and ``chunks.jsonl``.
+        Thư mục chứa thư mục con ``chroma/`` và ``chunks.jsonl``.
     embedder
-        A pre-loaded ``_Embedder`` instance. If ``None`` we lazily create one.
+        Đối tượng ``_Embedder`` đã nạp. Nếu là ``None``, sẽ tạo theo kiểu nạp lười.
     rrf_k
-        RRF constant (default 60).
+        Hằng số RRF (mặc định 60).
     use_flashrank
-        ``True`` (default) to enable FlashRank rerank.  Set to ``False`` to
-        force RRF-only.
+        ``True`` (mặc định) để bật tái xếp hạng FlashRank. Đặt ``False`` để
+        buộc chỉ dùng RRF.
     flashrank_model
-        FlashRank model name (default ``ranker_ms_marco_viT_5_1``).
+        Tên mô hình FlashRank (mặc định ``ranker_ms_marco_viT_5_1``).
     """
 
     def __init__(
@@ -192,7 +193,7 @@ class HybridRetriever:
         self.rrf_k = rrf_k
         self.collection_name = collection_name
 
-        # ---- chunks (source of truth for BM25 + return values) ----------
+        # ---- các đoạn (nguồn chuẩn cho BM25 + giá trị trả về) ------------
         chunks_path = db_dir / "chunks.jsonl"
         if not chunks_path.exists():
             raise FileNotFoundError(
@@ -211,7 +212,7 @@ class HybridRetriever:
         corpus_tokens = [tokenize(c["text"]) for c in self.chunks]
         self.bm25 = _BM25Index(corpus_tokens)
 
-        # ---- Chroma client + collection ----------------------------------
+        # ---- client + collection Chroma ----------------------------------
         try:
             import chromadb  # type: ignore
         except ImportError as exc:
@@ -235,19 +236,19 @@ class HybridRetriever:
                 f"Chroma collection '{collection_name}' is empty. Run ingestion.build_index first."
             )
 
-        # ---- embedder -----------------------------------------------------
+        # ---- bộ embedding -------------------------------------------------
         if embedder is None:
             from ..ingestion.embedder import load_embedder
 
             embedder = load_embedder(device=device)
         self.embedder = embedder
 
-        # ---- FlashRank (lazy) --------------------------------------------
+        # ---- FlashRank (nạp lười) ----------------------------------------
         self.use_flashrank = use_flashrank
         self._flashrank = _FlashRanker(model_name=flashrank_model) if use_flashrank else None
 
     # ------------------------------------------------------------------ #
-    # Public search
+    # Tìm kiếm công khai
     # ------------------------------------------------------------------ #
     def search(
         self,
@@ -259,19 +260,19 @@ class HybridRetriever:
         bm25_weight: float = 1.0,
         dense_weight: float = 1.0,
     ) -> List[Dict[str, Any]]:
-        """Hybrid search → RRF → FlashRank rerank → top_k results.
+        """Tìm kiếm lai → RRF → FlashRank tái xếp hạng → top_k kết quả.
 
-        Parameters
-        ----------
+        Tham số
+        -------
         top_k
-            Final number of chunks to return.
+            Số đoạn cuối cùng cần trả về.
         k_per_retriever
-            Number of chunks each branch (BM25 / Dense) contributes to RRF.
+            Số đoạn mỗi nhánh (BM25 / Dense) đóng góp vào RRF.
         rerank_pool
-            Number of RRF-fused candidates to feed into FlashRank.  Should be
-            ≥ ``top_k`` and ≤ ``k_per_retriever`` (clamped internally).
+            Số ứng viên đã hợp nhất RRF đưa vào FlashRank. Nên ≥ ``top_k`` và
+            ≤ ``k_per_retriever`` (được giới hạn nội bộ).
         bm25_weight, dense_weight
-            RRF branch weights (default 1.0 / 1.0).
+            Trọng số các nhánh RRF (mặc định 1.0 / 1.0).
         """
         if not query.strip():
             return []
@@ -279,7 +280,7 @@ class HybridRetriever:
         bm25_hits = self._bm25_search(query, k=k_per_retriever)
         dense_hits = self._dense_search(query, k=k_per_retriever)
 
-        # ---- RRF fusion -------------------------------------------------
+        # ---- Hợp nhất RRF ------------------------------------------------
         rrf_scores: Dict[int, float] = {}
         bm25_ranks: Dict[int, int] = {}
         dense_ranks: Dict[int, int] = {}
@@ -300,7 +301,7 @@ class HybridRetriever:
         pool_size = max(top_k, min(rerank_pool, len(ranked)))
         pool_idx = [idx for idx, _ in ranked[:pool_size]]
 
-        # Build candidate dicts (deep-ish copy so we can mutate).
+        # Tạo các dict ứng viên (sao chép đủ sâu để có thể thay đổi).
         candidates: List[Dict[str, Any]] = []
         for idx in pool_idx:
             chunk = dict(self.chunks[idx])
@@ -316,10 +317,10 @@ class HybridRetriever:
             )
             candidates.append(chunk)
 
-        # ---- Second-stage rerank (FlashRank) ----------------------------
+        # ---- Tái xếp hạng bước hai (FlashRank) ---------------------------
         if self._flashrank is not None:
             reranked = self._flashrank.rerank(query, candidates, top_k=top_k)
-            # Annotate final score: prefer rerank_score if available.
+            # Ghi điểm cuối: ưu tiên rerank_score nếu có.
             for c in reranked:
                 c["score"] = c.get("rerank_score", c.get("rrf_score", 0.0))
                 c["reranked"] = True
@@ -332,7 +333,7 @@ class HybridRetriever:
         return reranked
 
     # ------------------------------------------------------------------ #
-    # Internal: BM25
+    # Nội bộ: BM25
     # ------------------------------------------------------------------ #
     def _bm25_search(self, query: str, *, k: int) -> List[Tuple[int, float]]:
         tokens = tokenize(query)
@@ -347,7 +348,7 @@ class HybridRetriever:
         return [(int(i), float(scores[i])) for i in top_idx if scores[i] > 0]
 
     # ------------------------------------------------------------------ #
-    # Internal: Dense (Chroma)
+    # Nội bộ: Dense (Chroma)
     # ------------------------------------------------------------------ #
     def _dense_search(self, query: str, *, k: int) -> List[Tuple[int, float]]:
         qv = self.embedder.encode([query], show_progress=False)
@@ -356,7 +357,7 @@ class HybridRetriever:
         if k <= 0:
             return []
 
-        # Chroma expects a list of floats.
+        # Chroma yêu cầu một danh sách số thực.
         query_embedding = qv[0].tolist()
         result = self._collection.query(
             query_embeddings=[query_embedding],
@@ -364,13 +365,13 @@ class HybridRetriever:
             include=["metadatas", "distances", "documents"],
         )
 
-        # Map back to local chunk indices via the "idx" metadata we stored.
+        # Ánh xạ về chỉ số đoạn cục bộ qua siêu dữ liệu "idx" đã lưu.
         out: List[Tuple[int, float]] = []
         for dist, meta in zip(result["distances"][0], result["metadatas"][0]):
             idx = int(meta.get("idx", -1))
             if idx < 0:
                 continue
-            # Chroma cosine space returns distance = 1 - cos_sim.
+            # Không gian cosine của Chroma trả về khoảng cách = 1 - cos_sim.
             cos_sim = 1.0 - float(dist)
             out.append((idx, cos_sim))
         return out

@@ -1,14 +1,14 @@
-"""Qwen2.5-3B-Instruct LLM wrapper with HuggingFace transformers.
+"""Lớp bao LLM Qwen2.5-3B-Instruct sử dụng HuggingFace transformers.
 
-The loader tries to:
-  * Use 4-bit quantisation (``bitsandbytes``) on CUDA when available, to fit
-    the model comfortably on a single Kaggle T4 (16 GB).
-  * Fall back to fp16 on CUDA when bitsandbytes is not installed.
-  * Fall back to fp32 on CPU (very slow; only for tiny debugging).
-  * Use ``device_map="auto"`` so the model is sharded across GPUs when needed.
+Trình nạp sẽ thử:
+  * Dùng lượng tử hóa 4 bit (``bitsandbytes``) trên CUDA khi có để mô hình
+    chạy thoải mái trên một GPU Kaggle T4 (16 GB).
+  * Dự phòng bằng fp16 trên CUDA khi chưa cài bitsandbytes.
+  * Dự phòng bằng fp32 trên CPU (rất chậm; chỉ để gỡ lỗi nhỏ).
+  * Dùng ``device_map="auto"`` để phân mảnh mô hình trên nhiều GPU khi cần.
 
-All generation parameters are tuned for short, factual Vietnamese answers:
-  * temperature=0.2   -> mostly deterministic, reduces hallucination
+Mọi tham số sinh đều được tinh chỉnh cho câu trả lời tiếng Việt ngắn và thực tế:
+  * temperature=0.2   -> phần lớn tất định, giảm bịa thông tin
   * top_p=0.85
   * repetition_penalty=1.05
   * max_new_tokens=512
@@ -27,7 +27,7 @@ MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 
 
 class QwenGenerator:
-    """Lazy singleton-style wrapper around the Qwen2.5-3B-Instruct model."""
+    """Lớp bao singleton nạp lười quanh mô hình Qwen2.5-3B-Instruct."""
 
     _instance: Optional["QwenGenerator"] = None
     _lock = Lock()
@@ -75,7 +75,7 @@ class QwenGenerator:
         device = self._resolve_device()
         logger.info("Loading %s on %s ...", MODEL_NAME, device)
 
-        # Determine quantisation config.
+        # Xác định cấu hình lượng tử hóa.
         bnb_config = None
         if device == "cuda":
             want_4bit = load_in_4bit if load_in_4bit is not None else True
@@ -119,7 +119,7 @@ class QwenGenerator:
             return 0.0
 
     # ------------------------------------------------------------------ #
-    # Generation
+    # Sinh văn bản
     # ------------------------------------------------------------------ #
     def chat(
         self,
@@ -132,7 +132,7 @@ class QwenGenerator:
         repetition_penalty: float = 1.05,
         do_sample: Optional[bool] = None,
     ) -> str:
-        """Generate a single assistant reply for one (system, user) turn."""
+        """Sinh một câu trả lời của trợ lý cho một lượt (hệ thống, người dùng)."""
         import torch
 
         messages = [
@@ -166,7 +166,7 @@ class QwenGenerator:
                 **inputs,
                 **gen_kwargs,
             )
-        # Slice off the input tokens, decode only the new ones.
+        # Cắt bỏ token đầu vào, chỉ giải mã các token mới.
         in_len = inputs["input_ids"].shape[1]
         new_tokens = out[0][in_len:]
         reply = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
@@ -178,5 +178,5 @@ def load_generator(
     device: str = "auto",
     load_in_4bit: Optional[bool] = None,
 ) -> QwenGenerator:
-    """Convenience factory."""
+    """Hàm khởi tạo tiện dụng."""
     return QwenGenerator(device=device, load_in_4bit=load_in_4bit)

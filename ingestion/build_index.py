@@ -1,6 +1,6 @@
-"""End-to-end ingestion driver: manifest -> chunks -> FAISS index.
+"""Trình điều khiển nhập liệu đầu-cuối: manifest -> các đoạn -> chỉ mục Chroma.
 
-Run as a module:  ``python -m ingestion.build_index``
+Chạy dưới dạng mô-đun: ``python -m ingestion.build_index``
 """
 
 from __future__ import annotations
@@ -23,22 +23,23 @@ def run(
     device: str = "auto",
     batch_size: int = 8,
 ) -> dict:
-    """Run the full ingestion pipeline.
+    """Chạy toàn bộ quy trình nhập liệu.
 
-    Parameters
-    ----------
+    Tham số
+    -------
     manifest_path
-        Path to ``data/raw/manifest.jsonl`` produced by the crawler.
+        Đường dẫn đến ``data/raw/manifest.jsonl`` do trình thu thập tạo ra.
     chunks_path
-        Optional explicit output path for ``chunks.jsonl``.  Defaults to
-        ``data/processed/chunks.jsonl`` next to the manifest's parent.
+        Đường dẫn đầu ra tùy chọn cho ``chunks.jsonl``. Mặc định là
+        ``data/processed/chunks.jsonl`` cạnh thư mục cha của manifest.
     db_dir
-        Output directory for the FAISS index + chunk metadata.
+        Thư mục đầu ra cho chỉ mục Chroma và siêu dữ liệu của các đoạn.
     device
-        ``"cuda"``, ``"cpu"``, or ``"auto"``.
+        ``"cuda"``, ``"cpu"`` hoặc ``"auto"``.
     batch_size
-        Embedding batch size.  Lower this on small GPUs.
+        Kích thước lô embedding. Hãy giảm giá trị này trên GPU nhỏ.
     """
+
     manifest_path = Path(manifest_path)
     if chunks_path is None:
         chunks_path = manifest_path.parent.parent / "processed" / "chunks.jsonl"
@@ -87,6 +88,7 @@ def _cli() -> None:  # pragma: no cover
         batch_size=args.batch_size,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+
 
 
 if __name__ == "__main__":  # pragma: no cover

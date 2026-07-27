@@ -1,4 +1,4 @@
-"""Generation package: Qwen2.5-3B-Instruct LLM + Vietnamese RAG prompt + Summary Memory."""
+"""Gói sinh văn bản: LLM Qwen2.5-3B-Instruct + prompt RAG tiếng Việt + bộ nhớ tóm tắt."""
 
 from .llm import QwenGenerator  # noqa: F401
 from .memory import SummaryMemory, build_history_from_memory  # noqa: F401

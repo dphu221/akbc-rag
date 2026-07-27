@@ -1,23 +1,23 @@
-"""BFS crawler for https://handbook.uet.vnu.edu.vn/.
+"""Trình thu thập BFS cho https://handbook.uet.vnu.edu.vn/.
 
-Strategy
---------
-1. Start from the homepage.  Resolve every ``href`` that points **inside** the
-   handbook site (same host, OR a relative link such as ``./Nội quy - quy chế/``).
-2. For every internal page we download the HTML and also look for links to
-   ``.pdf`` / ``.docx`` / ``.doc`` files.  Those files are downloaded **once**
-   (content-addressed by URL) and saved under ``data/raw/files/``.
-3. We extract plain text from:
-     * each internal HTML page   -> ``data/raw/pages/<slug>.txt``
-     * each downloaded document  -> ``data/raw/files/<name>.txt``
-   The text files are what the ingestion module chunks.
-4. We write a single ``data/raw/manifest.jsonl`` (one JSON object per source
-   document) describing: url, local_path, title, source_kind, n_pages, n_chars.
+Chiến lược
+----------
+1. Bắt đầu từ trang chủ. Phân giải mọi ``href`` trỏ **bên trong** trang sổ tay
+   (cùng máy chủ HOẶC liên kết tương đối như ``./Nội quy - quy chế/``).
+2. Với mỗi trang nội bộ, tải HTML và tìm liên kết đến các tệp ``.pdf`` /
+   ``.docx`` / ``.doc``. Mỗi tệp chỉ được tải **một lần** (định danh nội dung
+   bằng URL) và lưu trong ``data/raw/files/``.
+3. Trích xuất văn bản thuần từ:
+     * mỗi trang HTML nội bộ -> ``data/raw/pages/<slug>.txt``
+     * mỗi tài liệu đã tải   -> ``data/raw/files/<name>.txt``
+   Mô-đun nhập liệu sẽ phân đoạn các tệp văn bản này.
+4. Ghi một tệp ``data/raw/manifest.jsonl`` (mỗi tài liệu nguồn là một đối tượng
+   JSON) mô tả: url, local_path, title, source_kind, n_pages, n_chars.
 
-External PDFs (e.g. on ``uet.vnu.edu.vn`` / ``vnu.edu.vn``) that are linked
-from the handbook are also downloaded because they ARE the regulations
-(Quy chế đào tạo, Quy chế sinh viên, ...).  Only the *pages* are restricted to
-the handbook host itself.
+Các tệp PDF bên ngoài (ví dụ trên ``uet.vnu.edu.vn`` / ``vnu.edu.vn``) được
+liên kết từ sổ tay cũng sẽ được tải vì chúng chính là các quy định (Quy chế
+đào tạo, Quy chế sinh viên, ...). Chỉ các *trang* mới bị giới hạn trong máy
+chủ của sổ tay.
 """
 
 from __future__ import annotations
@@ -46,20 +46,20 @@ USER_AGENT = (
 )
 HTML_TIMEOUT = 20
 FILE_TIMEOUT = 90
-POLITENESS_SLEEP = 0.5  # seconds between requests
-MAX_PAGES = 200  # safety cap
-MAX_FILES = 80  # safety cap on documents
+POLITENESS_SLEEP = 0.5  # số giây giữa các yêu cầu
+MAX_PAGES = 200  # giới hạn an toàn
+MAX_FILES = 80  # giới hạn an toàn cho số tài liệu
 
 DOC_EXTS = (".pdf", ".docx", ".doc")
 
 
 # --------------------------------------------------------------------------- #
-# URL helpers
+# Tiện ích URL
 # --------------------------------------------------------------------------- #
 def _normalize(url: str, base: str) -> Optional[str]:
-    """Resolve ``url`` against ``base``; return absolute URL without fragment.
+    """Phân giải ``url`` theo ``base``; trả về URL tuyệt đối không có fragment.
 
-    Returns ``None`` for mailto / javascript / anchor-only links.
+    Trả về ``None`` cho liên kết mailto / javascript / chỉ có anchor.
     """
     if not url:
         return None
@@ -72,7 +72,7 @@ def _normalize(url: str, base: str) -> Optional[str]:
 
 
 def _is_internal(url: str, base_host: str) -> bool:
-    """An URL is "internal" (a page to crawl) if it lives on the same host."""
+    """URL là "nội bộ" (trang cần thu thập) nếu nằm trên cùng máy chủ."""
     try:
         host = urlparse(url).netloc.lower()
     except Exception:
@@ -86,19 +86,19 @@ def _is_doc_link(url: str) -> bool:
 
 
 def _slugify(url: str) -> str:
-    """Build a filesystem-safe filename from a URL."""
+    """Tạo tên tệp an toàn cho hệ thống tệp từ URL."""
     parsed = urlparse(url)
     path = parsed.path.strip("/")
     if not path:
         return "index"
-    # Replace separators, keep unicode (Vietnamese) characters.
+    # Thay dấu phân cách, giữ lại các ký tự Unicode (tiếng Việt).
     slug = re.sub(r"[\s/]+", "_", path)
     slug = re.sub(r"[^A-Za-z0-9_\-.\u00C0-\u024F\u1E00-\u1EFF]", "", slug)
     return slug[:120] or "doc"
 
 
 # --------------------------------------------------------------------------- #
-# HTTP fetch helpers
+# Tiện ích tải qua HTTP
 # --------------------------------------------------------------------------- #
 def _get(url: str, *, stream: bool = False, timeout: int = HTML_TIMEOUT) -> Optional[requests.Response]:
     try:
@@ -109,15 +109,15 @@ def _get(url: str, *, stream: bool = False, timeout: int = HTML_TIMEOUT) -> Opti
             stream=stream,
         )
         if resp.status_code == 200:
-            # The handbook server returns UTF-8 content but no ``charset`` in
-            # ``Content-Type``, so ``requests`` defaults to ISO-8859-1 which
-            # turns Vietnamese hrefs into mojibake and they 404 downstream.
-            # Force UTF-8 decoding for text responses.
+            # Máy chủ sổ tay trả về nội dung UTF-8 nhưng không có ``charset``
+            # trong ``Content-Type``, nên ``requests`` mặc định dùng ISO-8859-1,
+            # làm hỏng href tiếng Việt và gây lỗi 404 ở bước sau.
+            # Buộc giải mã UTF-8 đối với phản hồi văn bản.
             if not stream and resp.encoding is None or (resp.encoding or "").lower() not in (
                 "utf-8",
                 "utf8",
             ):
-                # Only override when the body actually looks like UTF-8 text.
+                # Chỉ ghi đè khi phần thân thực sự có dạng văn bản UTF-8.
                 ctype = (resp.headers.get("Content-Type") or "").lower()
                 if "text" in ctype or "xml" in ctype or "html" in ctype or "json" in ctype:
                     resp.encoding = "utf-8"
@@ -142,7 +142,7 @@ def _save_response_content(resp: requests.Response, dest: Path) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Core crawl
+# Quy trình thu thập chính
 # --------------------------------------------------------------------------- #
 def _extract_links(html: str, base_url: str) -> List[str]:
     soup = BeautifulSoup(html, "html.parser")
@@ -166,11 +166,11 @@ def _extract_title(html: str) -> str:
 
 def _html_to_text(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
-    # Remove script / style noise.
+    # Loại bỏ nội dung nhiễu từ script / style.
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     text = soup.get_text(separator="\n")
-    # Collapse blank lines but keep paragraph breaks.
+    # Thu gọn dòng trống nhưng vẫn giữ ngắt đoạn.
     lines = [ln.strip() for ln in text.splitlines()]
     cleaned = "\n".join(ln for ln in lines if ln)
     return cleaned
@@ -184,9 +184,9 @@ def run_crawl(
     max_files: int = MAX_FILES,
     sleep: float = POLITENESS_SLEEP,
 ) -> Dict[str, object]:
-    """Crawl the handbook site + linked regulations.
+    """Thu thập trang sổ tay và các quy định được liên kết.
 
-    Returns a small summary dict with counts and paths.
+    Trả về dict tóm tắt nhỏ gồm số lượng và các đường dẫn.
     """
     out = Path(out_dir)
     pages_dir = out / "pages"
@@ -212,7 +212,7 @@ def run_crawl(
         if resp is None:
             continue
 
-        # Save page HTML text.
+        # Lưu văn bản của trang HTML.
         try:
             html = resp.text
         except Exception as exc:  # pragma: no cover
@@ -237,7 +237,7 @@ def run_crawl(
                 }
             )
 
-        # Discover new links.
+        # Tìm các liên kết mới.
         for link in _extract_links(html, url):
             if _is_doc_link(link):
                 if link in downloaded or len(downloaded) >= max_files:
@@ -269,7 +269,7 @@ def _download_document(url: str, files_dir: Path, manifest: List[Dict[str, objec
     if resp is None:
         return
 
-    # Build a unique filename: <slug>__<hash8>.<ext>
+    # Tạo tên tệp duy nhất: <slug>__<hash8>.<ext>
     parsed = urlparse(url)
     raw_name = Path(parsed.path).name or "document"
     raw_name = re.sub(r"[^A-Za-z0-9_\-.\u00C0-\u024F\u1E00-\u1EFF]", "_", raw_name)
@@ -279,7 +279,7 @@ def _download_document(url: str, files_dir: Path, manifest: List[Dict[str, objec
     if not _save_response_content(resp, dest):
         return
 
-    # Extract text next to the binary.
+    # Trích xuất văn bản cạnh tệp nhị phân.
     pages = extract_text_from_file(str(dest))
     full_text = "\n\n".join(pages)
     text_path = dest.with_suffix(dest.suffix + ".txt")
@@ -299,7 +299,7 @@ def _download_document(url: str, files_dir: Path, manifest: List[Dict[str, objec
 
 
 # --------------------------------------------------------------------------- #
-# CLI
+# Giao diện dòng lệnh
 # --------------------------------------------------------------------------- #
 def _cli() -> None:  # pragma: no cover
     import argparse

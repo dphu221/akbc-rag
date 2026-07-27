@@ -1,9 +1,9 @@
-"""Prompt templates for the UET handbook RAG chatbot.
+"""Các mẫu prompt cho chatbot RAG Sổ tay Sinh viên UET.
 
-All prompts are written in Vietnamese because the source documents and user
-queries are Vietnamese. The system prompt explicitly forbids hallucination
-and instructs the model to refuse gracefully when retrieval is empty or
-insufficient.
+Mọi prompt đều được viết bằng tiếng Việt vì tài liệu nguồn và câu hỏi của
+người dùng đều là tiếng Việt. Prompt hệ thống nghiêm cấm việc bịa thông tin
+và yêu cầu mô hình từ chối một cách phù hợp khi kết quả truy hồi trống hoặc
+không đầy đủ.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ NGUYÊN TẮC BẮT BUỘC:
 
 REFUSAL = "Tôi không có đủ dữ liệu để trả lời câu hỏi này."
 
-# RAG prompt template (context + history + question).
+# Mẫu prompt RAG (ngữ cảnh + lịch sử + câu hỏi).
 RAG_TEMPLATE = """[Ngữ cảnh từ Sổ tay Sinh viên UET]
 {context}
 
@@ -41,7 +41,7 @@ Hãy dựa vào Ngữ cảnh ở trên để trả lời câu hỏi của sinh v
 
 
 def _format_citation(source: str, article_id: str) -> str:
-    """Build a citation string such as ``quy_che_dt_k67 - Điều 16``."""
+    """Tạo chuỗi trích dẫn, chẳng hạn ``quy_che_dt_k67 - Điều 16``."""
     parts = []
     if source:
         parts.append(source)
@@ -51,7 +51,7 @@ def _format_citation(source: str, article_id: str) -> str:
 
 
 def build_context(retrieved_chunks: List[Dict[str, Any]]) -> str:
-    """Render the retrieved chunks as a numbered context block."""
+    """Hiển thị các đoạn đã truy hồi thành khối ngữ cảnh được đánh số."""
     if not retrieved_chunks:
         return "(Không có đoạn ngữ cảnh nào được truy hồi.)"
     lines: List[str] = []
@@ -75,11 +75,11 @@ def build_history(
     *,
     max_turns: int = 6,
 ) -> str:
-    """Render conversation history for the prompt.
+    """Hiển thị lịch sử hội thoại cho prompt.
 
-    Accepts either:
-      * a ``SummaryMemory`` instance (preferred — uses summary + recent window),
-      * a list of ``{"role", "content"}`` dicts (legacy sliding window),
+    Chấp nhận một trong các dạng:
+      * một đối tượng ``SummaryMemory`` (ưu tiên — dùng tóm tắt + cửa sổ gần đây),
+      * danh sách các dict ``{"role", "content"}`` (cửa sổ trượt kiểu cũ),
       * ``None``.
     """
     if isinstance(history, SummaryMemory):
@@ -107,7 +107,7 @@ def build_rag_prompt(
     *,
     max_turns: int = 6,
 ) -> str:
-    """Render the full user-side RAG prompt."""
+    """Hiển thị prompt RAG đầy đủ phía người dùng."""
     return RAG_TEMPLATE.format(
         context=build_context(retrieved_chunks),
         history=build_history(history, max_turns=max_turns),

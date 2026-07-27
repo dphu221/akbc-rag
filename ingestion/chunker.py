@@ -1,28 +1,28 @@
-"""Structure-aware chunker for Vietnamese university regulations.
+"""Trình phân đoạn nhận biết cấu trúc cho các quy định đại học Việt Nam.
 
-The handbook documents are legal-style text organised as:
+Tài liệu sổ tay là văn bản kiểu pháp lý được tổ chức như sau:
 
     Chương 1: NHỮNG QUY ĐỊNH CHUNG
     Điều 1. Phạm vi điều chỉnh
     1. Quy chế này quy định ...
     2. Sinh viên ... phải tuân thủ ...
 
-We want **one chunk per Điều (article)** — not a fixed-length sliding window —
-because each Điều is a self-contained semantic unit.  The chunker therefore:
+Cần tạo **một đoạn cho mỗi Điều** — không dùng cửa sổ trượt có độ dài cố định —
+vì mỗi Điều là một đơn vị ngữ nghĩa độc lập. Do đó trình phân đoạn:
 
-1. Normalises whitespace and unicode.
-2. Splits the document into "Chương" blocks (best-effort regex).
-3. Within each Chương, finds every "Điều <n>." anchor and groups all text up
-   to the next "Điều" anchor into a single chunk.
-4. If no "Điều" anchors are found (e.g. an HTML info page), falls back to
-   paragraph-based chunking with a maximum character budget.
-5. Each chunk is stored as a dict with:
-   - ``chunk_id``   : stable hash-derived id (source + chương + điều)
-   - ``article_id`` : "Điều <n>" or "PB-<k>" for paragraph fallback
-   - ``chapter``    : parent chương title (if any)
-   - ``source``     : filename of the original document
-   - ``source_url`` : url of the original document (if known)
-   - ``text``       : the chunk body
+1. Chuẩn hóa khoảng trắng và Unicode.
+2. Chia tài liệu thành các khối "Chương" (regex cố gắng tối đa).
+3. Trong mỗi Chương, tìm mọi mốc "Điều <n>." và gom toàn bộ văn bản đến mốc
+   "Điều" tiếp theo thành một đoạn.
+4. Nếu không tìm thấy mốc "Điều" (ví dụ trang thông tin HTML), chuyển sang
+   phân đoạn theo đoạn văn với giới hạn ký tự tối đa.
+5. Mỗi đoạn được lưu dưới dạng dict gồm:
+   - ``chunk_id``   : mã ổn định tạo từ hàm băm (nguồn + chương + điều)
+   - ``article_id`` : "Điều <n>" hoặc "PB-<k>" khi dự phòng theo đoạn văn
+   - ``chapter``    : tiêu đề chương cha (nếu có)
+   - ``source``     : tên tệp của tài liệu gốc
+   - ``source_url`` : URL của tài liệu gốc (nếu biết)
+   - ``text``       : nội dung đoạn
 """
 
 from __future__ import annotations
@@ -37,24 +37,24 @@ from typing import Dict, Iterable, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
-# Regex patterns
+# Các mẫu regex
 # --------------------------------------------------------------------------- #
-# Match "Chương 1", "Chương I", "Chương 12:", "CHƯƠNG 3.", "Chương 4 - Tên"
+# Khớp "Chương 1", "Chương I", "Chương 12:", "CHƯƠNG 3.", "Chương 4 - Tên"
 CHAPTER_RE = re.compile(
-    r"""^\s*chương\s+          # prefix
-        ([0-9IVXLCDM]+)         # number (arabic or roman)
-        \s*[:\.\-–—]?\s*        # optional separator
-        ([^\n]*)                # optional title
+    r"""^\s*chương\s+          # tiền tố
+        ([0-9IVXLCDM]+)         # số (Ả Rập hoặc La Mã)
+        \s*[:\.\-–—]?\s*        # dấu phân cách tùy chọn
+        ([^\n]*)                # tiêu đề tùy chọn
     $""",
     re.IGNORECASE | re.VERBOSE | re.MULTILINE,
 )
 
-# Match "Điều 1.", "Điều 12.", "ĐIỀU 3.", "Điều 4:" (optionally followed by title)
+# Khớp "Điều 1.", "Điều 12.", "ĐIỀU 3.", "Điều 4:" (có thể kèm tiêu đề)
 ARTICLE_RE = re.compile(
-    r"""(?m)^\s*điều\s+        # prefix (must be at line start)
-        (\d{1,3})               # article number (1-3 digits)
-        \s*[:\.\-–—]?\s*        # optional separator
-        ([^\n]*)                # optional title (the rest of the line)
+    r"""(?m)^\s*điều\s+        # tiền tố (phải ở đầu dòng)
+        (\d{1,3})               # số điều (1-3 chữ số)
+        \s*[:\.\-–—]?\s*        # dấu phân cách tùy chọn
+        ([^\n]*)                # tiêu đề tùy chọn (phần còn lại của dòng)
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -64,17 +64,17 @@ FALLBACK_OVERLAP = 150
 
 
 # --------------------------------------------------------------------------- #
-# Helpers
+# Các hàm tiện ích
 # --------------------------------------------------------------------------- #
 def _normalize_text(text: str) -> str:
-    """Collapse runs of whitespace, normalise line breaks."""
-    # Replace Windows newlines.
+    """Thu gọn khoảng trắng liên tiếp và chuẩn hóa dấu ngắt dòng."""
+    # Thay dấu xuống dòng kiểu Windows.
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    # Remove zero-width / soft hyphens that show up in PDF extractions.
+    # Loại bỏ ký tự độ rộng bằng không / gạch nối mềm xuất hiện khi trích PDF.
     text = text.replace("\u200b", "").replace("\u00ad", "")
-    # Trim trailing spaces on each line.
+    # Xóa khoảng trắng cuối mỗi dòng.
     lines = [ln.rstrip() for ln in text.splitlines()]
-    # Collapse 3+ blank lines into 1.
+    # Thu gọn từ 3 dòng trống liên tiếp trở lên còn 1.
     cleaned: List[str] = []
     blank_run = 0
     for ln in lines:
@@ -107,7 +107,7 @@ def _build_chunk(
     body = body.strip()
     if not body:
         return None
-    # Prepend the article title to the body so the embedding sees the topic.
+    # Thêm tiêu đề điều vào trước nội dung để embedding nhận biết chủ đề.
     full_text = f"{article_id}. {article_title}\n{body}".strip() if article_title else f"{article_id}.\n{body}"
     chunk = {
         "chunk_id": _stable_id(source, article_id),
@@ -122,12 +122,12 @@ def _build_chunk(
 
 
 # --------------------------------------------------------------------------- #
-# Article-based chunking
+# Phân đoạn theo Điều
 # --------------------------------------------------------------------------- #
 def _split_by_chapter(text: str) -> List[Tuple[str, str]]:
-    """Split ``text`` into (chapter_title, chapter_body) pairs.
+    """Chia ``text`` thành các cặp (tiêu đề chương, nội dung chương).
 
-    If no chapters are detected, returns a single pair with empty title.
+    Nếu không phát hiện chương, trả về một cặp duy nhất có tiêu đề trống.
     """
     matches = list(CHAPTER_RE.finditer(text))
     if not matches:
@@ -144,7 +144,7 @@ def _split_by_chapter(text: str) -> List[Tuple[str, str]]:
         if body:
             pairs.append((chapter_title, body))
 
-    # Keep any leading text before the first chapter as its own block.
+    # Giữ phần văn bản trước chương đầu tiên thành một khối riêng.
     head = text[: matches[0].start()].strip()
     if head:
         pairs.insert(0, ("", head))
@@ -184,7 +184,7 @@ def _chunk_by_articles(
 
 
 # --------------------------------------------------------------------------- #
-# Fallback: paragraph-based chunking
+# Dự phòng: phân đoạn theo đoạn văn
 # --------------------------------------------------------------------------- #
 def _chunk_paragraph_fallback(
     text: str,
@@ -193,7 +193,7 @@ def _chunk_paragraph_fallback(
     source_url: Optional[str],
     chapter: str = "",
 ) -> List[Dict[str, object]]:
-    """Used when no Điều structure is detected (HTML info pages, plain prose)."""
+    """Dùng khi không phát hiện cấu trúc Điều (trang HTML, văn xuôi thuần)."""
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     chunks: List[Dict[str, object]] = []
     buffer: List[str] = []
@@ -230,7 +230,7 @@ def _chunk_paragraph_fallback(
 
 
 # --------------------------------------------------------------------------- #
-# Public API
+# API công khai
 # --------------------------------------------------------------------------- #
 def chunk_document(
     text: str,
@@ -238,15 +238,15 @@ def chunk_document(
     source: str,
     source_url: Optional[str] = None,
 ) -> List[Dict[str, object]]:
-    """Chunk a single document (string) into structured chunks.
+    """Chia một tài liệu (chuỗi) thành các đoạn có cấu trúc.
 
-    Returns a list of chunk dicts.  See module docstring for the schema.
+    Trả về danh sách dict của các đoạn. Xem docstring mô-đun để biết schema.
     """
     text = _normalize_text(text)
     if not text:
         return []
 
-    # Try article-based chunking per chapter first.
+    # Trước tiên thử phân đoạn theo Điều trong từng chương.
     all_chunks: List[Dict[str, object]] = []
     article_chunks_found = False
     for chapter_title, chapter_body in _split_by_chapter(text):
@@ -260,7 +260,7 @@ def chunk_document(
             article_chunks_found = True
             all_chunks.extend(article_chunks)
         else:
-            # Chapter had no Điều anchors — fall back to paragraphs within it.
+            # Chương không có mốc Điều — chuyển sang các đoạn văn trong chương.
             all_chunks.extend(
                 _chunk_paragraph_fallback(
                     chapter_body,
@@ -271,7 +271,7 @@ def chunk_document(
             )
 
     if not article_chunks_found and not all_chunks:
-        # Whole document had neither Chương nor Điều — pure paragraph mode.
+        # Toàn bộ tài liệu không có Chương hay Điều — chỉ dùng chế độ đoạn văn.
         all_chunks = _chunk_paragraph_fallback(
             text, source=source, source_url=source_url, chapter=""
         )
@@ -285,11 +285,10 @@ def chunk_corpus(
     *,
     out_path: str | Path | None = None,
 ) -> List[Dict[str, object]]:
-    """Read the crawler manifest and chunk every referenced document.
+    """Đọc manifest của trình thu thập và phân đoạn mọi tài liệu được tham chiếu.
 
-    ``manifest_path`` is a JSONL file written by ``crawler.run_crawl``.
-    Returns the full list of chunks and (optionally) writes them to
-    ``out_path`` as JSONL.
+    ``manifest_path`` là tệp JSONL do ``crawler.run_crawl`` ghi. Trả về danh
+    sách đầy đủ các đoạn và (tùy chọn) ghi chúng vào ``out_path`` dạng JSONL.
     """
     manifest_path = Path(manifest_path)
     if out_path is None:
@@ -309,7 +308,7 @@ def chunk_corpus(
                 logger.warning("Missing text file: %s", text_path)
                 continue
             text = text_path.read_text(encoding="utf-8", errors="ignore")
-            source = text_path.stem  # use stem (no extension) as source name
+            source = text_path.stem  # dùng tên gốc (không có đuôi) làm tên nguồn
             doc_chunks = chunk_document(
                 text,
                 source=source,
@@ -329,7 +328,7 @@ def chunk_corpus(
 
 
 # --------------------------------------------------------------------------- #
-# CLI
+# Giao diện dòng lệnh
 # --------------------------------------------------------------------------- #
 def _cli() -> None:  # pragma: no cover
     import argparse

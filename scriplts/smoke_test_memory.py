@@ -1,10 +1,10 @@
-"""Smoke test: SummaryMemory rolling summarisation with a stub LLM.
+"""Kiểm thử nhanh: SummaryMemory tóm tắt tích lũy bằng LLM giả lập.
 
-We simulate a multi-turn conversation, then verify:
-  - recent window is truncated to ``recent_turns`` pairs
-  - summary text grows as old turns roll out of the window
-  - get_prompt_history() returns [summary system msg, recent turns...]
-  - prompt text contains the summary block + recent block
+Mô phỏng hội thoại nhiều lượt, sau đó xác minh:
+  - cửa sổ gần đây được cắt còn ``recent_turns`` cặp
+  - văn bản tóm tắt dài ra khi các lượt cũ rời khỏi cửa sổ
+  - get_prompt_history() trả về [tin nhắn hệ thống tóm tắt, các lượt gần đây...]
+  - văn bản prompt chứa khối tóm tắt và khối gần đây
 """
 
 from __future__ import annotations
@@ -22,17 +22,17 @@ sys.path.insert(0, str(ROOT))
 from generation.memory import SummaryMemory
 
 
-# ---- Stub LLM: just echoes a condensed version ----------------------- #
+# ---- LLM giả lập: chỉ trả lại phiên bản cô đọng ----------------------- #
 def stub_llm_chat(system_prompt: str, user_prompt: str) -> str:
-    """Pretend to summarise: return a short tag indicating what was folded."""
-    # Extract the "Lượt mới" block to know what we're folding.
+    """Giả lập việc tóm tắt: trả về nhãn ngắn cho biết nội dung đã gộp."""
+    # Trích khối "Lượt mới" để biết nội dung đang được gộp.
     if "Tóm tắt hiện tại" in user_prompt and "Lượt mới" in user_prompt:
-        # Summarisation call
-        # Find the new turn content
+        # Lệnh gọi tóm tắt
+        # Tìm nội dung lượt mới
         lines = user_prompt.split("\n")
         user_line = next((ln for ln in lines if ln.startswith("Sinh viên:")), "")
         asst_line = next((ln for ln in lines if ln.startswith("Trợ lý:")), "")
-        # Build a short summary
+        # Tạo bản tóm tắt ngắn
         prev = ""
         if "Tóm tắt hiện tại:" in user_prompt:
             idx = user_prompt.index("Tóm tắt hiện tại:")
@@ -45,12 +45,12 @@ def stub_llm_chat(system_prompt: str, user_prompt: str) -> str:
             new_bits.append(f"Trợ lý trả lời về: {asst_line.replace('Trợ lý:', '').strip()[:80]}")
         return " | ".join(new_bits)
     if "nén" in system_prompt.lower():
-        # Compression call
+        # Lệnh gọi nén
         return user_prompt[:400] + " [compressed]"
     return "stub-response"
 
 
-# ---- Run test -------------------------------------------------------- #
+# ---- Chạy kiểm thử --------------------------------------------------- #
 memory = SummaryMemory(llm_chat=stub_llm_chat, recent_turns=2)
 
 logger.info("Turn 1: user")

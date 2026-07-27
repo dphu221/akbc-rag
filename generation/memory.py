@@ -1,30 +1,30 @@
-"""Conversation memory with progressive summarisation.
+"""Bộ nhớ hội thoại với khả năng tóm tắt tăng dần.
 
-Strategy
---------
-* The last ``recent_turns`` turns (default 2 user + 2 assistant = 4 messages)
-  are kept **verbatim** so the LLM sees exact wording for follow-up questions
-  like "vậy loại xuất sắc thì sao?".
-* Anything older is **condensed into a running summary** by the LLM itself.
-  The summary is updated incrementally: each time a new turn exits the
-  "recent window", the LLM is asked to fold it into the existing summary.
-* The final prompt receives::
+Chiến lược
+----------
+* Các lượt ``recent_turns`` gần nhất (mặc định 2 người dùng + 2 trợ lý = 4
+  tin nhắn) được giữ **nguyên văn** để LLM thấy chính xác câu chữ của câu hỏi
+  nối tiếp như "vậy loại xuất sắc thì sao?".
+* Nội dung cũ hơn được chính LLM **cô đọng vào bản tóm tắt đang tích lũy**.
+  Bản tóm tắt được cập nhật dần: mỗi khi một lượt rời khỏi "cửa sổ gần đây",
+  LLM được yêu cầu gộp lượt đó vào bản tóm tắt hiện có.
+* Prompt cuối cùng nhận::
 
       [Tóm tắt hội thoại trước đó]
-      <summary text or "(không có)">
+      <văn bản tóm tắt hoặc "(không có)">
 
       [Các lượt gần đây]
       Sinh viên: ...
       Trợ lý: ...
       Sinh viên: <current question>
 
-This keeps prompt length roughly ``O(recent_turns + summary_tokens)`` instead
-of growing linearly with conversation length.
+Nhờ đó độ dài prompt xấp xỉ ``O(recent_turns + summary_tokens)`` thay vì tăng
+tuyến tính theo độ dài hội thoại.
 
-Thread-safety
--------------
-The class is not thread-safe; it is intended to be used from a single
-Streamlit session (one per browser tab).
+An toàn luồng
+------------
+Lớp này không an toàn luồng; nó được thiết kế để dùng trong một phiên
+Streamlit duy nhất (mỗi tab trình duyệt một phiên).
 """
 
 from __future__ import annotations
@@ -37,24 +37,24 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
-# Data classes
+# Các lớp dữ liệu
 # --------------------------------------------------------------------------- #
 @dataclass
 class SummaryMemory:
-    """Pluggable summary-memory manager.
+    """Trình quản lý bộ nhớ tóm tắt có thể thay thế.
 
-    Parameters
-    ----------
+    Tham số
+    -------
     llm_chat
-        Callable ``(system_prompt: str, user_prompt: str) -> str`` used to
-        produce the rolling summary.  Typically ``QwenGenerator.chat``.
+        Hàm gọi được ``(system_prompt: str, user_prompt: str) -> str`` dùng để
+        tạo bản tóm tắt tích lũy. Thường là ``QwenGenerator.chat``.
     recent_turns
-        Number of most-recent *message pairs* (user + assistant) to keep
-        verbatim.  Default 2 → up to 4 raw messages in the prompt.
+        Số *cặp tin nhắn* gần nhất (người dùng + trợ lý) cần giữ nguyên văn.
+        Mặc định 2 → tối đa 4 tin nhắn thô trong prompt.
     max_summary_tokens
-        Soft cap for the summary text (in characters, not tokens — close
-        enough for Vietnamese where 1 token ≈ 2-4 chars).  When exceeded we
-        ask the LLM to compress the summary further.
+        Giới hạn mềm cho văn bản tóm tắt (tính bằng ký tự, không phải token —
+        đủ gần với tiếng Việt, nơi 1 token ≈ 2-4 ký tự). Khi vượt giới hạn,
+        chương trình yêu cầu LLM nén bản tóm tắt thêm.
     """
 
     llm_chat: Callable[[str, str], str]
@@ -63,30 +63,30 @@ class SummaryMemory:
 
     summary: str = ""
     recent: List[Dict[str, str]] = field(default_factory=list)
-    # Full raw history is kept for display in the UI, but only the summary +
-    # recent window go into the prompt.
+    # Lịch sử thô đầy đủ được giữ để hiển thị trên UI, nhưng chỉ bản tóm tắt
+    # và cửa sổ gần đây được đưa vào prompt.
     full_history: List[Dict[str, str]] = field(default_factory=list)
 
     # ------------------------------------------------------------------ #
-    # Public API
+    # API công khai
     # ------------------------------------------------------------------ #
     def add_user_turn(self, content: str) -> None:
-        """Record a user message.  Does NOT trigger summarisation."""
+        """Ghi một tin nhắn người dùng. KHÔNG kích hoạt tóm tắt."""
         self.full_history.append({"role": "user", "content": content})
         self.recent.append({"role": "user", "content": content})
 
     def add_assistant_turn(self, content: str) -> None:
-        """Record an assistant reply and roll the window if needed."""
+        """Ghi câu trả lời của trợ lý và cuộn cửa sổ nếu cần."""
         self.full_history.append({"role": "assistant", "content": content})
         self.recent.append({"role": "assistant", "content": content})
         self._maybe_roll()
 
     def get_prompt_history(self) -> List[Dict[str, str]]:
-        """Return the messages that should go into the next LLM prompt.
+        """Trả về các tin nhắn cần đưa vào prompt LLM tiếp theo.
 
-        The first message is a synthetic ``system``-style note carrying the
-        summary; the rest are the verbatim recent turns.  Callers should
-        prepend their own system prompt separately.
+        Tin nhắn đầu tiên là ghi chú tổng hợp kiểu ``system`` chứa bản tóm tắt;
+        phần còn lại là các lượt gần đây còn nguyên văn. Bên gọi nên tự thêm
+        prompt hệ thống của mình vào trước.
         """
         out: List[Dict[str, str]] = []
         if self.summary:
@@ -100,11 +100,11 @@ class SummaryMemory:
         return out
 
     def get_summary_text(self) -> str:
-        """Return the running summary text (possibly empty)."""
+        """Trả về văn bản tóm tắt đang tích lũy (có thể trống)."""
         return self.summary
 
     def get_recent_text(self) -> str:
-        """Render the recent window as plain text (for the RAG prompt template)."""
+        """Hiển thị cửa sổ gần đây dưới dạng văn bản thuần (cho mẫu prompt RAG)."""
         if not self.recent:
             return "(chưa có lịch sử)"
         lines: List[str] = []
@@ -120,30 +120,30 @@ class SummaryMemory:
         return "\n".join(lines) if lines else "(chưa có lịch sử)"
 
     def clear(self) -> None:
-        """Reset all state (used when the user clicks "Clear chat")."""
+        """Đặt lại toàn bộ trạng thái (dùng khi người dùng bấm "Xóa lịch sử chat")."""
         self.summary = ""
         self.recent = []
         self.full_history = []
 
     # ------------------------------------------------------------------ #
-    # Internal: rolling summarisation
+    # Nội bộ: tóm tắt tích lũy
     # ------------------------------------------------------------------ #
     def _maybe_roll(self) -> None:
-        """If the recent window exceeds ``recent_turns`` pairs, fold the
-        oldest pair into the summary."""
-        # ``recent_turns`` is measured in *pairs* (user+assistant).
+        """Nếu cửa sổ gần đây vượt quá ``recent_turns`` cặp, gộp cặp cũ nhất
+        vào bản tóm tắt."""
+        # ``recent_turns`` được tính theo *cặp* (người dùng + trợ lý).
         max_messages = self.recent_turns * 2
         while len(self.recent) > max_messages:
-            # Pop the oldest pair (user, assistant) — but be defensive: the
-            # window might not be perfectly paired (e.g. user asked, no
-            # assistant reply yet).
+            # Lấy cặp cũ nhất (người dùng, trợ lý) ra — nhưng vẫn phòng vệ vì
+            # cửa sổ có thể chưa ghép cặp hoàn chỉnh (ví dụ người dùng đã hỏi
+            # nhưng trợ lý chưa trả lời).
             oldest_user = self.recent.pop(0)
             oldest_assistant: Optional[Dict[str, str]] = None
             if self.recent and self.recent[0]["role"] == "assistant":
                 oldest_assistant = self.recent.pop(0)
             self._update_summary(oldest_user, oldest_assistant)
 
-        # If the summary has grown too large, compress it.
+        # Nếu bản tóm tắt quá dài, hãy nén lại.
         if len(self.summary) > self.max_summary_chars:
             self._compress_summary()
 
@@ -176,7 +176,7 @@ class SummaryMemory:
             self.summary = new_summary.strip()
         except Exception as exc:
             logger.warning("Summary update failed (%s); keeping previous summary.", exc)
-            # Fallback: append a terse manual note.
+            # Phương án dự phòng: thêm một ghi chú thủ công ngắn gọn.
             self.summary = (prev_summary + f"\n- SV hỏi: {u[:120]}").strip()
 
     def _compress_summary(self) -> None:
@@ -192,12 +192,12 @@ class SummaryMemory:
 
 
 # --------------------------------------------------------------------------- #
-# Prompt helper that replaces the old sliding-window builder
+# Tiện ích prompt thay thế trình tạo cửa sổ trượt cũ
 # --------------------------------------------------------------------------- #
 def build_history_from_memory(memory: SummaryMemory) -> str:
-    """Render the memory's summary + recent window as a single text block.
+    """Hiển thị bản tóm tắt và cửa sổ gần đây thành một khối văn bản.
 
-    This is consumed by ``generation.prompts.build_rag_prompt``.
+    Nội dung này được ``generation.prompts.build_rag_prompt`` sử dụng.
     """
     parts: List[str] = []
     summary = memory.get_summary_text().strip()

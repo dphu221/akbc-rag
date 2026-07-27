@@ -1,10 +1,10 @@
-"""Ingestion package: turn raw text into Chroma-indexed chunks."""
+"""Gói nhập liệu: chuyển văn bản thô thành các đoạn được lập chỉ mục bằng Chroma."""
 
 from .chunker import chunk_document, chunk_corpus  # noqa: F401
 from .embedder import build_chroma_index, load_embedder  # noqa: F401
 
-# Backwards-compatible alias kept for any external code still calling the
-# old FAISS-era function name.
+# Giữ bí danh tương thích ngược cho mã bên ngoài vẫn gọi tên hàm cũ
+# từ thời còn sử dụng FAISS.
 build_faiss_index = build_chroma_index
 
 __all__ = [

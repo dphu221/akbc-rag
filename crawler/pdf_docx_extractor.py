@@ -1,13 +1,13 @@
-"""Extract plain text from PDF / DOCX / DOC files.
+"""Trích xuất văn bản thuần từ các tệp PDF / DOCX / DOC.
 
-We try multiple back-ends (in this order):
-  * PDF  -> ``pdfplumber`` (best for Vietnamese), fallback ``PyPDF2``, fallback ``pymupdf``.
+Thử nhiều backend (theo thứ tự):
+  * PDF  -> ``pdfplumber`` (tốt nhất cho tiếng Việt), dự phòng bằng ``PyPDF2``, rồi ``pymupdf``.
   * DOCX -> ``python-docx``.
-  * DOC  -> ``antiword`` (system binary) if available, otherwise skip.
+  * DOC  -> ``antiword`` (tệp nhị phân hệ thống) nếu có, nếu không thì bỏ qua.
 
-The function returns a *list of pages* (each page is a string). For DOCX the
-whole document is returned as a single "page" because DOCX has no real page
-concept. Callers that do not care about page boundaries can simply
+Hàm trả về một *danh sách trang* (mỗi trang là một chuỗi). Với DOCX, toàn bộ
+tài liệu được trả về dưới dạng một "trang" vì DOCX không có khái niệm trang
+thực sự. Bên gọi không quan tâm đến ranh giới trang có thể chỉ cần dùng
 ``"\n\n".join(pages)``.
 """
 
@@ -34,7 +34,7 @@ def _extract_pdf(path: str) -> List[str]:
                 pages.append(txt)
         if any(p.strip() for p in pages):
             return pages
-    except Exception as exc:  # pragma: no cover - best effort
+    except Exception as exc:  # pragma: no cover - cố gắng tối đa
         logger.debug("pdfplumber failed on %s: %s", path, exc)
 
     # 2) PyPDF2
@@ -72,7 +72,7 @@ def _extract_docx(path: str) -> List[str]:
 
         doc = Document(path)
         paragraphs = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
-        # Also pull text from tables (regulations often use tables).
+        # Đồng thời lấy văn bản từ bảng (các quy định thường dùng bảng).
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -86,7 +86,7 @@ def _extract_docx(path: str) -> List[str]:
 
 
 def _extract_doc(path: str) -> List[str]:
-    """Extract text from legacy .doc using antiword if available."""
+    """Trích xuất văn bản từ tệp .doc cũ bằng antiword nếu có."""
     try:
         result = subprocess.run(
             ["antiword", path], capture_output=True, timeout=60, check=False
@@ -103,10 +103,10 @@ def _extract_doc(path: str) -> List[str]:
 
 
 def extract_text_from_file(path: str) -> List[str]:
-    """Return a list of page-text strings for the given document.
+    """Trả về danh sách chuỗi văn bản theo trang của tài liệu đã cho.
 
-    Returns ``[""]`` (one empty page) when extraction fails entirely, so callers
-    can iterate without special-casing.
+    Trả về ``[""]`` (một trang trống) khi trích xuất thất bại hoàn toàn để bên
+    gọi có thể lặp mà không cần xử lý trường hợp đặc biệt.
     """
     p = Path(path)
     if not p.exists():
@@ -125,5 +125,5 @@ def extract_text_from_file(path: str) -> List[str]:
 
 
 def extract_text(path: str) -> str:
-    """Convenience wrapper that returns a single concatenated string."""
+    """Hàm bao tiện dụng trả về một chuỗi đã nối duy nhất."""
     return "\n\n".join(extract_text_from_file(path))
