@@ -147,4 +147,63 @@ class SummaryMemory:
         if len(self.summary) > self.max_summary_chars:
             self._compress_summary()
 
-    
+    def _update_summary(
+        self,
+        user_turn: Dict[str, str],
+        assistant_turn: Optional[Dict[str, str]],
+    ) -> None:
+        prev_summary = self.summary.strip()
+        u = user_turn["content"].strip()
+        a = (assistant_turn["content"].strip() if assistant_turn else "(không có phản hồi)")
+        sys_prompt = (
+            "Bạn là trình tóm tắt hội thoại cho chatbot Sổ tay Sinh viên UET. "
+            "Nhiệm vụ: cập nhật bản tóm tắt hội thoại dựa trên tóm tắt cũ và một lượt trò chuyện mới. "
+            "Quy tắc:\n"
+            "1. Chỉ giữ lại thông tin CỐT LÕI: chủ đề sinh viên hỏi, quyết định/trả lời chính của trợ lý, "
+            "các thực thể (Điều X, học bổng, học phí, ký túc xá, ...) đã được đề cập.\n"
+            "2. Viết bằng tiếng Việt, ngắn gọn, dưới 150 từ.\n"
+            "3. Nếu thông tin mới trùng lặp với tóm tắt cũ, không lặp lại.\n"
+            "4. KHÔNG bịa ra thông tin; nếu không rõ, bỏ qua.\n"
+            "5. Trả về duy nhất bản tóm tắt mới, không kèm giải thích."
+        )
+        user_prompt = (
+            f"Tóm tắt hiện tại:\n{prev_summary or '(không có)'}\n\n"
+            f"Lượt mới:\nSinh viên: {u}\nTrợ lý: {a}\n\n"
+            f"Hãy trả về bản tóm tắt cập nhật."
+        )
+        try:
+            new_summary = self.llm_chat(sys_prompt, user_prompt)
+            self.summary = new_summary.strip()
+        except Exception as exc:
+            logger.warning("Summary update failed (%s); keeping previous summary.", exc)
+            # Fallback: append a terse manual note.
+            self.summary = (prev_summary + f"\n- SV hỏi: {u[:120]}").strip()
+
+    def _compress_summary(self) -> None:
+        sys_prompt = (
+            "Bạn là trình nén tóm tắt.  Bản tóm tắt dưới đây đang quá dài.  Hãy nén nó "
+            "xuống dưới 400 ký tự, giữ lại các thực thể quan trọng (Điều X, tên quy chế, "
+            "số tiền, ngày tháng).  Trả về duy nhất bản tóm tắt đã nén."
+        )
+        try:
+            self.summary = self.llm_chat(sys_prompt, self.summary).strip()
+        except Exception as exc:
+            logger.warning("Summary compression failed (%s).", exc)
+
+
+# --------------------------------------------------------------------------- #
+# Prompt helper that replaces the old sliding-window builder
+# --------------------------------------------------------------------------- #
+def build_history_from_memory(memory: SummaryMemory) -> str:
+    """Render the memory's summary + recent window as a single text block.
+
+    This is consumed by ``generation.prompts.build_rag_prompt``.
+    """
+    parts: List[str] = []
+    summary = memory.get_summary_text().strip()
+    if summary:
+        parts.append(f"[Tóm tắt các lượt trước]\n{summary}")
+    recent = memory.get_recent_text()
+    if recent and recent != "(chưa có lịch sử)":
+        parts.append(f"[Các lượt gần đây]\n{recent}")
+    return "\n\n".join(parts) if parts else "(chưa có lịch sử)"
